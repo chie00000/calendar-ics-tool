@@ -1,0 +1,923 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>プリント予定表 → カレンダー</title>
+<style>
+:root {
+  --bg: #f6f7f9; --card: #fff; --text: #1d2330; --muted: #5f6b7a; --line: #d6dbe1;
+  --accent: #1a73e8; --accent-weak: #e8f0fe; --on-accent: #fff;
+  --danger: #c5221f; --ok: #137333; --ok-bg: #e6f4ea;
+  --warn-bg: #fff6db; --warn-line: #e5b53a; --err-bg: #fdecea;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #14171c; --card: #1e222a; --text: #e6e8eb; --muted: #9aa4b0; --line: #353b45;
+    --accent: #8ab4f8; --accent-weak: #22324a; --on-accent: #10213d;
+    --danger: #f28b82; --ok: #81c995; --ok-bg: #1d3325;
+    --warn-bg: #3a3118; --warn-line: #8a6d1f; --err-bg: #3c1f1d;
+    color-scheme: dark;
+  }
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0; background: var(--bg); color: var(--text); line-height: 1.6; font-size: 15px;
+  font-family: system-ui, -apple-system, "Hiragino Sans", "Noto Sans JP", "Yu Gothic UI", Meiryo, sans-serif;
+}
+.wrap { max-width: 760px; margin: 0 auto; padding: 16px 16px 24px; }
+h1 { font-size: 1.3rem; margin: 8px 0 4px; }
+.lead { color: var(--muted); margin: 0 0 16px; font-size: .9rem; }
+section, details.box {
+  background: var(--card); border: 1px solid var(--line); border-radius: 12px;
+  padding: 16px; margin-bottom: 16px;
+}
+h2 { font-size: 1.05rem; margin: 0 0 8px; display: flex; align-items: center; gap: 8px; }
+h3 { font-size: .95rem; margin: 16px 0 6px; }
+.step {
+  display: inline-grid; place-items: center; flex: none; width: 26px; height: 26px; border-radius: 50%;
+  background: var(--accent); color: var(--on-accent); font-size: .85rem;
+}
+.note { color: var(--muted); font-size: .85rem; margin: 4px 0 10px; }
+.small { font-size: .85rem; }
+summary { cursor: pointer; font-weight: 600; }
+details.box > summary { font-size: 1.05rem; }
+ol.howto { padding-left: 1.3em; margin: 8px 0 0; }
+ol.howto li { margin-bottom: 4px; }
+
+input[type=text], input[type=time], input[type=date], input[type=number], textarea {
+  font: inherit; font-size: 16px; padding: 8px 10px; width: 100%; min-width: 0;
+  border: 1px solid var(--line); border-radius: 8px; background: var(--card); color: var(--text);
+}
+textarea { resize: vertical; }
+textarea.big { min-height: 220px; font-size: 14px; line-height: 1.5; }
+input:focus, textarea:focus { outline: 2px solid var(--accent); outline-offset: -1px; border-color: transparent; }
+input[type=checkbox], input[type=radio] { width: 20px; height: 20px; accent-color: var(--accent); flex: none; }
+
+.btn {
+  font: inherit; font-size: .95rem; padding: 9px 14px; border-radius: 8px; cursor: pointer;
+  border: 1px solid var(--line); background: var(--card); color: var(--text);
+}
+.btn:hover { border-color: var(--accent); }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: var(--on-accent); font-weight: 600; }
+.btn.danger { color: var(--danger); }
+.btn.small { padding: 5px 10px; font-size: .85rem; }
+.btn:disabled { opacity: .5; cursor: not-allowed; }
+.row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 10px; }
+.row.between { justify-content: space-between; }
+.tag { display: inline-block; font-size: .75rem; padding: 1px 8px; border-radius: 99px; background: var(--accent-weak); color: var(--text); }
+
+.msg { margin-top: 10px; padding: 10px 12px; border-radius: 8px; font-size: .9rem; }
+.msg.error { background: var(--err-bg); border: 1px solid var(--danger); }
+.msg.ok { background: var(--ok-bg); border: 1px solid var(--ok); }
+.msg ul { margin: 6px 0; padding-left: 1.3em; }
+.msg pre.snip {
+  background: var(--card); border: 1px solid var(--line); border-radius: 6px; padding: 8px;
+  overflow-x: auto; font-size: 12px; margin: 8px 0;
+}
+
+.radios { display: flex; flex-wrap: wrap; gap: 6px 18px; margin-top: 8px; }
+.radios label { display: flex; align-items: center; gap: 6px; cursor: pointer; }
+
+.trow { display: grid; grid-template-columns: 1fr auto 7.5em auto; gap: 8px; align-items: center; margin-bottom: 8px; }
+.trow span { color: var(--muted); font-size: .85rem; white-space: nowrap; }
+.rule { display: grid; gap: 8px; margin-top: 6px; }
+.rule label { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; cursor: pointer; }
+.rule input[type=number] { width: 5.5em; }
+.rule input[type=time] { width: 8em; }
+
+.card { border: 1px solid var(--line); border-radius: 10px; padding: 12px; margin-top: 12px; background: var(--card); }
+.card.has-warn { border-color: var(--warn-line); background: var(--warn-bg); }
+.card.off { opacity: .55; }
+.card-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.chk { display: flex; align-items: center; gap: 10px; font-weight: 600; font-size: 1.05rem; cursor: pointer; }
+.chk input { width: 22px; height: 22px; }
+.warn { margin: 8px 0 0; padding: 0 0 0 1.2em; font-size: .85rem; color: var(--text); }
+.warn li::marker { content: "⚠ "; }
+.info { margin-top: 6px; display: flex; flex-wrap: wrap; gap: 6px; }
+.fields { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 12px; margin-top: 10px; }
+.fields .full { grid-column: 1 / -1; }
+label.f { display: flex; flex-direction: column; gap: 2px; font-size: .8rem; color: var(--muted); }
+label.alldayl { flex-direction: row; align-items: center; gap: 8px; font-size: .95rem; color: var(--text); padding-top: 18px; cursor: pointer; }
+.card.allday .time-field { display: none; }
+.prefixed { display: flex; align-items: center; gap: 4px; }
+.pfx { color: var(--muted); font-size: .85rem; white-space: nowrap; }
+.empty { color: var(--muted); text-align: center; padding: 20px 0; }
+
+section.dl {
+  position: sticky; bottom: 0; margin-bottom: 0;
+  padding-bottom: calc(12px + env(safe-area-inset-bottom, 0px));
+  box-shadow: 0 -4px 16px rgba(0,0,0,.12);
+}
+.dl .row { margin-top: 0; }
+.dl .fname { flex: 1 1 180px; }
+.dl .btn.primary { flex: 1 1 220px; padding: 12px; font-size: 1rem; }
+@media (min-width: 640px) {
+  .fields { grid-template-columns: 1.3fr .8fr 1fr 1fr; }
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>📅 プリント予定表 → カレンダー</h1>
+  <p class="lead">紙の予定表の写真から、Googleカレンダーに一括登録できる .ics ファイルを作ります。入力した内容はこのブラウザの中だけに保存され、外部には送信されません。</p>
+
+  <details class="box">
+    <summary>使い方</summary>
+    <ol class="howto">
+      <li>①のプロンプトをコピーし、Claudeのチャットにプリントの写真と一緒に貼り付けて送ります。</li>
+      <li>Claudeが返したJSONをすべてコピーし、②に貼り付けて「読み込む」を押します。</li>
+      <li>必要なら③で時刻の対応表や開始時刻のルールを直します。</li>
+      <li>④で予定を確認・修正し、登録したい予定にチェックを入れます（黄色の予定は要確認です）。</li>
+      <li>⑤で .ics ファイルをダウンロードします。</li>
+      <li>パソコンのブラウザでGoogleカレンダーを開き、「設定」→「インポート / エクスポート」から取り込みます。</li>
+    </ol>
+  </details>
+
+  <!-- ① プロンプト -->
+  <section>
+    <h2><span class="step">1</span>読み取り用プロンプト</h2>
+    <p class="note">写真と一緒にClaudeへ送る指示文です。ここで自由に編集でき、編集内容は自動で保存されます。<span id="promptEdited" class="tag" hidden>編集済み</span></p>
+    <details id="promptDetails">
+      <summary>プロンプトを表示・編集する</summary>
+      <textarea id="prompt" class="big" spellcheck="false" style="margin-top:8px"></textarea>
+    </details>
+    <div class="row">
+      <button id="copyPrompt" class="btn primary" type="button">📋 プロンプトをコピー</button>
+      <button id="resetPrompt" class="btn" type="button">↺ 初期値に戻す</button>
+    </div>
+  </section>
+
+  <!-- ② JSON -->
+  <section>
+    <h2><span class="step">2</span>JSONを貼り付け</h2>
+    <p class="note">Claudeの返答をそのまま貼り付けてOKです（前後の説明文や ``` は自動で取り除きます）。</p>
+    <textarea id="jsonInput" class="big" spellcheck="false" placeholder='{ "title": "...", "events": [ ... ] }'></textarea>
+    <div class="radios" role="radiogroup" aria-label="読み込み方法">
+      <label><input type="radio" name="mode" value="append" checked>今の一覧に追加</label>
+      <label><input type="radio" name="mode" value="replace">今の一覧と置き換え</label>
+    </div>
+    <div class="row">
+      <button id="importBtn" class="btn primary" type="button">読み込む</button>
+      <button id="clearJson" class="btn" type="button">貼り付け欄を空にする</button>
+    </div>
+    <div id="importMsg" hidden></div>
+  </section>
+
+  <!-- ③ 設定 -->
+  <section>
+    <h2><span class="step">3</span>時刻などの設定</h2>
+
+    <h3>予定名の頭に付ける文字</h3>
+    <input type="text" id="prefix" placeholder="例：【ソフトテニス部】">
+
+    <h3>練習時間の表記 → 終了時刻 の対応表</h3>
+    <p class="note">プリントの「5限45分」などの表記を、ここの終了時刻に変換します。下校時刻が変わったらここを直してください。</p>
+    <div id="tableRows"></div>
+    <div class="row">
+      <button id="addRow" class="btn small" type="button">＋ 行を追加</button>
+      <button id="resetTable" class="btn small" type="button">↺ 初期値に戻す</button>
+    </div>
+
+    <h3>開始時刻がプリントに書いていない予定</h3>
+    <div class="rule">
+      <label><input type="radio" name="startMode" value="before">終了時刻の <input type="number" id="minutes" min="0" max="600" step="5" inputmode="numeric"> 分前にする</label>
+      <label><input type="radio" name="startMode" value="fixed">固定の時刻にする <input type="time" id="fixedStart"></label>
+    </div>
+    <div class="row">
+      <button id="applyStart" class="btn" type="button">対象の予定に一括で設定</button>
+      <span id="applyTarget" class="note" style="margin:0"></span>
+    </div>
+    <p class="note">※設定を変えると、まだ手で直していない予定には自動で反映されます。「一括で設定」を押すと、手で直した予定も含めて設定し直します。</p>
+    <div id="applyMsg" hidden></div>
+  </section>
+
+  <!-- ④ 一覧 -->
+  <section id="listSection">
+    <h2><span class="step">4</span>予定の確認・編集</h2>
+    <p id="count" class="note"></p>
+    <div class="row">
+      <button id="addEvent" class="btn small" type="button">＋ 予定を追加</button>
+      <button id="selAll" class="btn small" type="button">すべて選択</button>
+      <button id="selNone" class="btn small" type="button">すべて解除</button>
+      <button id="clearAll" class="btn small danger" type="button">一覧をすべて削除</button>
+    </div>
+    <div id="list"></div>
+  </section>
+
+  <!-- ⑤ ダウンロード -->
+  <section class="dl">
+    <div class="row">
+      <input type="text" id="fileName" class="fname" aria-label="ファイル名" placeholder="ファイル名">
+      <button id="downloadBtn" class="btn primary" type="button">📅 .ics をダウンロード</button>
+    </div>
+    <div id="dlMsg" hidden></div>
+  </section>
+</div>
+
+<script type="text/plain" id="defaultPrompt">
+あなたは、配布された紙の予定表（写真）から予定を読み取り、決められたJSON形式に変換するアシスタントです。
+添付した写真の予定表を読み取り、下の「出力形式」どおりのJSONだけを出力してください。JSON以外の説明文は書かないでください。
+
+# 出力形式
+{
+  "title": "予定表の名前（例：ソフトテニス部 練習予定表 2026年10月）",
+  "events": [
+    {
+      "date": "2026-10-05",
+      "title": "校内練習",
+      "allDay": false,
+      "start": null,
+      "end": null,
+      "timeCode": "6限45分",
+      "location": "",
+      "items": [],
+      "note": ""
+    }
+  ]
+}
+
+各項目の意味：
+- date：日付。"YYYY-MM-DD" 形式
+- title：予定の名前
+- allDay：終日の予定なら true、時間が決まっている予定なら false
+- start / end：開始・終了時刻。"HH:MM" の24時間表記（例："09:00"）。書いていなければ null
+- timeCode：「5限45分」のような練習時間の表記。なければ null
+- location：場所。なければ ""
+- items：持ち物の配列（例：["弁当", "水筒"]）。なければ []
+- note：備考・注記。なければ ""
+
+# 共通ルール
+- 1日に複数の予定があれば、別々のイベントとして出力する。
+- 和暦は西暦に変換する（令和N年 = R N = 2018+N 年。例：R8 = 2026年）。
+- 年がプリントのどこにも書いていない場合は、date を "MM-DD" 形式（例："10-05"）で出力する（年はツール側で補う）。
+- 時刻も timeCode もない予定は allDay を true にする。
+- 持ち物は items に、備考・注記は note に入れる。
+- 読み取れない、または判断に迷う箇所は推測で埋めず、note に「要確認：〜」と書く。
+- 正しいJSONにする（文字列は半角の " で囲む、最後の要素の後ろにカンマを付けない）。
+
+# この予定表（ソフトテニス部 練習予定表）専用のルール
+- 「男子練習予定」の列を読み取る。男子と女子の欄が結合されている日は、その内容を男子の予定として扱う。
+- 「行事」の列は読み取らない。
+- 「休み」の日は出力しない。
+- 学年で分かれている日（例：「2年 校内練習　1年 休み」）は、2年の予定を採用する。
+- 練習時間が「5限45分」「6限50分」のような表記の場合は、変換せずにその表記をそのまま timeCode に入れ、start と end は null にする（時刻への変換はツール側で行う）。
+- 「9:00-12:00」のように時刻が書いてある場合は、その時刻を start と end に入れ、timeCode は null にする。
+- 「新人大会」「研修大会」など大会系の予定は、時刻が書いていなければ allDay を true にする。
+- 「※8:30登校・準備」「◆」などの注記は、該当する予定の note に入れる。◆などの記号の意味がプリントの欄外に書いてあれば、その説明も note に入れる（例：「◆：〇〇（欄外の説明）」）。
+- title は予定の内容だけにする（例：「校内練習」「新人大会」）。「ソフトテニス部」などの部活名は付けない。
+</script>
+
+<script>
+(() => {
+  'use strict';
+
+  // ---------- 初期値 ----------
+  const $ = (s, r = document) => r.querySelector(s);
+  const WEEK = ['日', '月', '火', '水', '木', '金', '土'];
+  const DEFAULT_PROMPT = $('#defaultPrompt').textContent.trim();
+  const DEFAULT_TABLE = [
+    { code: '5限45分', end: '17:00' },
+    { code: '6限45分', end: '18:00' },
+    { code: '5限50分', end: '17:30' },
+    { code: '6限50分', end: '18:30' },
+  ];
+  const DEFAULT_RULE = { mode: 'before', minutes: 90, fixed: '15:30' };
+  const DEFAULT_PREFIX = '【ソフトテニス部】';
+  const UID_DOMAIN = 'print-to-ics';
+
+  // ---------- 保存（ブラウザ内） ----------
+  const store = {
+    get(key, def) {
+      try {
+        const v = localStorage.getItem('ics.' + key);
+        return v === null ? def : JSON.parse(v);
+      } catch (e) { return def; }
+    },
+    set(key, val) { try { localStorage.setItem('ics.' + key, JSON.stringify(val)); } catch (e) {} },
+    remove(key) { try { localStorage.removeItem('ics.' + key); } catch (e) {} },
+  };
+  const clone = (o) => JSON.parse(JSON.stringify(o));
+
+  let timeTable = store.get('timeTable', clone(DEFAULT_TABLE));
+  let rule = Object.assign({}, DEFAULT_RULE, store.get('startRule', {}));
+  let prefix = store.get('prefix', DEFAULT_PREFIX);
+  let events = store.get('events', []);
+  let seq = Date.now();
+  const newId = () => 'e' + (seq++).toString(36);
+  const persist = () => store.set('events', events);
+
+  // ---------- 小物 ----------
+  function esc(s) {
+    return String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  }
+  const pad = (n) => String(n).padStart(2, '0');
+  const nfkc = (s) => String(s).normalize('NFKC');
+  const normTitle = (s) => nfkc(s || '').replace(/\s+/g, '');
+
+  function showMsg(box, type, html) {
+    box.className = 'msg ' + type;
+    box.innerHTML = html;
+    box.hidden = false;
+  }
+  function hideMsg(box) { box.hidden = true; }
+
+  function flash(btn, text) {
+    const orig = btn.dataset.orig || btn.textContent;
+    btn.dataset.orig = orig;
+    btn.textContent = text;
+    clearTimeout(btn._t);
+    btn._t = setTimeout(() => { btn.textContent = orig; }, 1600);
+  }
+
+  async function copyText(t) {
+    try { await navigator.clipboard.writeText(t); return true; } catch (e) {
+      const ta = document.createElement('textarea');
+      ta.value = t; ta.setAttribute('readonly', ''); ta.style.position = 'fixed'; ta.style.opacity = '0';
+      document.body.appendChild(ta); ta.select();
+      let ok = false;
+      try { ok = document.execCommand('copy'); } catch (_) {}
+      ta.remove();
+      return ok;
+    }
+  }
+
+  function todayStr() {
+    const d = new Date();
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+  }
+  function isValidDate(y, m, d) {
+    const dt = new Date(Date.UTC(y, m - 1, d));
+    return dt.getUTCFullYear() === y && dt.getUTCMonth() === m - 1 && dt.getUTCDate() === d;
+  }
+  function weekday(dateStr) {
+    const [y, m, d] = dateStr.split('-').map(Number);
+    return WEEK[new Date(Date.UTC(y, m - 1, d)).getUTCDay()];
+  }
+  function fmtDate(dateStr) {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) return '日付なし';
+    const [, m, d] = dateStr.split('-').map(Number);
+    return `${m}/${d}(${weekday(dateStr)})`;
+  }
+  function nextDay(dateStr) {
+    const [y, m, d] = dateStr.split('-').map(Number);
+    const dt = new Date(Date.UTC(y, m - 1, d + 1));
+    return `${dt.getUTCFullYear()}${pad(dt.getUTCMonth() + 1)}${pad(dt.getUTCDate())}`;
+  }
+  const toMin = (t) => { const [h, m] = t.split(':').map(Number); return h * 60 + m; };
+  const fromMin = (n) => { n = Math.max(0, Math.min(23 * 60 + 59, n)); return `${pad(Math.floor(n / 60))}:${pad(n % 60)}`; };
+
+  // 年のない日付：今日以降で一番近い日付の年にする
+  function inferYear(m, d) {
+    const now = new Date();
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    let y = now.getFullYear();
+    for (let i = 0; i < 8; i++, y++) {
+      if (!isValidDate(y, m, d)) continue; // 2/29 対策
+      if (new Date(y, m - 1, d) >= today) return y;
+    }
+    return null;
+  }
+
+  // ---------- ① プロンプト ----------
+  const promptEl = $('#prompt');
+  promptEl.value = store.get('prompt', DEFAULT_PROMPT);
+  function updatePromptState() {
+    const edited = promptEl.value !== DEFAULT_PROMPT;
+    $('#promptEdited').hidden = !edited;
+    if (edited) store.set('prompt', promptEl.value); else store.remove('prompt');
+  }
+  promptEl.addEventListener('input', updatePromptState);
+  updatePromptState();
+
+  $('#copyPrompt').addEventListener('click', async (e) => {
+    const ok = await copyText(promptEl.value);
+    flash(e.currentTarget, ok ? '✓ コピーしました' : 'コピーできませんでした');
+  });
+  $('#resetPrompt').addEventListener('click', (e) => {
+    if (promptEl.value === DEFAULT_PROMPT) { flash(e.currentTarget, 'すでに初期値です'); return; }
+    if (!confirm('プロンプトを初期値に戻します。編集した内容は消えます。よろしいですか？')) return;
+    promptEl.value = DEFAULT_PROMPT;
+    updatePromptState();
+    flash(e.currentTarget, '✓ 初期値に戻しました');
+  });
+
+  // ---------- ② JSON 読み込み ----------
+  function extractJsonText(raw) {
+    let t = raw.trim();
+    const fence = t.match(/```[a-zA-Z]*\s*([\s\S]*?)```/);
+    if (fence) t = fence[1].trim();
+    const first = t.search(/[\[{]/);
+    if (first > 0) t = t.slice(first);
+    const last = Math.max(t.lastIndexOf('}'), t.lastIndexOf(']'));
+    if (last >= 0 && last < t.length - 1) t = t.slice(0, last + 1);
+    return t;
+  }
+
+  function describeJsonError(err, text) {
+    const msg = String(err && err.message || err);
+    let line = null, col = null, m;
+    if ((m = msg.match(/line (\d+) column (\d+)/i))) { line = +m[1]; col = +m[2]; }
+    else if ((m = msg.match(/position (\d+)/i))) {
+      const pos = +m[1];
+      const before = text.slice(0, pos);
+      line = before.split('\n').length;
+      col = pos - before.lastIndexOf('\n');
+    }
+    let html = '<b>JSONの形式が正しくないため、読み込めませんでした。</b>';
+    if (line) {
+      html += `<br>${line}行目・${col}文字目あたりに問題があります。`;
+      const lines = text.split('\n');
+      const from = Math.max(0, line - 3), to = Math.min(lines.length, line + 1);
+      const snip = lines.slice(from, to).map((l, i) => {
+        const n = from + i + 1;
+        return (n === line ? '▶' : ' ') + String(n).padStart(4) + ' | ' + l;
+      }).join('\n');
+      html += `<pre class="snip">${esc(snip)}</pre>`;
+    }
+    const hints = [];
+    if (!text.trim()) hints.push('JSONが見つかりません。Claudeの返答から { で始まる部分をコピーしてください。');
+    if (/unexpected end|end of (json )?(input|data)|unterminated/i.test(msg)) hints.push('JSONが途中で切れているようです。最後の「]」や「}」が足りないか、コピーしきれていない可能性があります。');
+    if (/,\s*[\]}]/.test(text)) hints.push('最後の項目の後ろに余計な「,」（カンマ）があるようです。「}」や「]」の直前のカンマを消してください。');
+    if (/}\s*{/.test(text)) hints.push('予定と予定の間の「,」（カンマ）が抜けている可能性があります。「},{」のようにつないでください。');
+    if (/[“”]/.test(text)) hints.push('全角の引用符「“ ”」が使われています。半角の「"」に直してください。');
+    if (/'[^'\n]*'\s*:/.test(text)) hints.push('「\'」（シングルクォート）ではなく「"」（ダブルクォート）で囲む必要があります。');
+    if (hints.length) html += '<ul>' + hints.map((h) => `<li>${esc(h)}</li>`).join('') + '</ul>';
+    html += '<p class="small">自分で直すのが難しいときは、Claudeに「JSONの形式が崩れているので、正しいJSONだけを出力し直してください」と頼んでください。</p>';
+    html += `<details class="small"><summary>元のエラーメッセージ</summary><code>${esc(msg)}</code></details>`;
+    return html;
+  }
+
+  const isBlank = (v) => v === null || v === undefined || (typeof v === 'string' && (v.trim() === '' || v.trim().toLowerCase() === 'null'));
+  function toStr(v) {
+    if (isBlank(v)) return '';
+    return String(v).trim();
+  }
+
+  function parseDate(v) {
+    const bad = `「date」が ${esc(JSON.stringify(v))} になっています。"2026-10-05" のような形式にしてください。`;
+    if (isBlank(v)) return { error: '「date」（日付）がありません。' };
+    if (typeof v !== 'string') return { error: bad };
+    const s = nfkc(v).trim();
+    let m;
+    if ((m = s.match(/^(\d{4})[-\/.年](\d{1,2})[-\/.月](\d{1,2})日?$/))) {
+      const [y, mo, d] = [+m[1], +m[2], +m[3]];
+      if (!isValidDate(y, mo, d)) return { error: `「date」の ${esc(v)} は存在しない日付です。` };
+      return { value: `${y}-${pad(mo)}-${pad(d)}`, inferred: false };
+    }
+    if ((m = s.match(/^(\d{1,2})[-\/.月](\d{1,2})日?$/))) {
+      const [mo, d] = [+m[1], +m[2]];
+      const y = inferYear(mo, d);
+      if (!y || !isValidDate(y, mo, d)) return { error: `「date」の ${esc(v)} は存在しない日付です。` };
+      return { value: `${y}-${pad(mo)}-${pad(d)}`, inferred: true };
+    }
+    return { error: bad };
+  }
+
+  function parseTime(v, name) {
+    if (isBlank(v)) return { value: '' };
+    const s = nfkc(v).trim();
+    const m = s.match(/^(\d{1,2}):(\d{2})$/);
+    if (m && +m[1] <= 23 && +m[2] <= 59) return { value: `${pad(+m[1])}:${m[2]}` };
+    return { error: `「${name}」が ${esc(JSON.stringify(v))} になっています。"09:00" のような24時間表記か null にしてください。` };
+  }
+
+  function parseItems(v) {
+    if (isBlank(v)) return { value: '' };
+    if (Array.isArray(v)) return { value: v.map(toStr).filter(Boolean).join('、') };
+    if (typeof v === 'string') return { value: v.split(/[、,，\n]/).map((x) => x.trim()).filter(Boolean).join('、') };
+    return { error: '「items」（持ち物）は ["弁当", "水筒"] のようなリストにしてください。' };
+  }
+
+  function normalizeData(data) {
+    const errors = [], out = [];
+    let list;
+    if (Array.isArray(data)) list = data;
+    else if (data && typeof data === 'object' && Array.isArray(data.events)) list = data.events;
+    else if (data && typeof data === 'object' && 'events' in data) {
+      errors.push('「events」が [ ] で囲まれたリストになっていません。');
+      return { errors, events: out };
+    } else {
+      errors.push('「"events": [ … ]」が見つかりません。{ "events": [ {予定1}, {予定2} ] } の形にしてください。');
+      return { errors, events: out };
+    }
+    if (!list.length) errors.push('「events」の中に予定が1件もありません。');
+
+    list.forEach((e, i) => {
+      const label = `${i + 1}件目` + (e && typeof e.title === 'string' && e.title.trim() ? `「${esc(e.title.trim())}」` : '');
+      if (!e || typeof e !== 'object' || Array.isArray(e)) { errors.push(`${label}：予定が { } で囲まれていません。`); return; }
+      const errs = [];
+      const d = parseDate(e.date); if (d.error) errs.push(d.error);
+      const title = toStr(e.title); if (!title) errs.push('「title」（予定の名前）がありません。');
+      let allDay = false;
+      if (e.allDay === true || e.allDay === 'true') allDay = true;
+      else if (!(e.allDay === false || isBlank(e.allDay) || e.allDay === 'false')) errs.push(`「allDay」は true か false にしてください（今は ${esc(JSON.stringify(e.allDay))}）。`);
+      const st = parseTime(e.start, 'start'); if (st.error) errs.push(st.error);
+      const en = parseTime(e.end, 'end'); if (en.error) errs.push(en.error);
+      const items = parseItems(e.items); if (items.error) errs.push(items.error);
+      for (const k of ['location', 'note', 'timeCode']) {
+        if (!isBlank(e[k]) && typeof e[k] === 'object') errs.push(`「${k}」は文字列にしてください。`);
+      }
+      if (errs.length) { errs.forEach((x) => errors.push(`${label}：${x}`)); return; }
+
+      const ev = {
+        id: newId(), checked: true, date: d.value, yearInferred: d.inferred, title, allDay,
+        start: st.value, end: en.value, timeCode: toStr(e.timeCode), location: toStr(e.location),
+        items: items.value, note: toStr(e.note),
+        noPrintStart: false, autoStart: false, autoEnd: false,
+      };
+      if (!allDay) {
+        if (!ev.start) { ev.noPrintStart = true; ev.autoStart = true; }
+        if (!ev.end && ev.timeCode) ev.autoEnd = true;
+      }
+      out.push(ev);
+    });
+    return { errors, events: out };
+  }
+
+  const dupKey = (ev) => [ev.date, ev.allDay ? 'allday' : ev.start, normTitle(ev.title)].join('|');
+  function sortEvents() {
+    events.sort((a, b) =>
+      (a.date || '9999').localeCompare(b.date || '9999') ||
+      (a.allDay === b.allDay ? 0 : a.allDay ? -1 : 1) ||
+      (a.start || '99').localeCompare(b.start || '99'));
+  }
+
+  $('#importBtn').addEventListener('click', () => {
+    const box = $('#importMsg');
+    const raw = $('#jsonInput').value;
+    if (!raw.trim()) { showMsg(box, 'error', '貼り付け欄が空です。Claudeが出力したJSONを貼り付けてください。'); return; }
+    const text = extractJsonText(raw);
+    let data;
+    try { data = JSON.parse(text); } catch (err) { showMsg(box, 'error', describeJsonError(err, text)); return; }
+
+    const res = normalizeData(data);
+    if (res.errors.length) {
+      showMsg(box, 'error',
+        `<b>JSONは読めましたが、中身に問題があります（${res.errors.length}か所）。</b>` +
+        '<ul>' + res.errors.map((x) => `<li>${x}</li>`).join('') + '</ul>' +
+        '<p class="small">直してからもう一度「読み込む」を押してください。何も読み込まれていません。</p>');
+      return;
+    }
+
+    const mode = document.querySelector('input[name=mode]:checked').value;
+    if (mode === 'replace' && events.length &&
+        !confirm(`今の一覧（${events.length}件）を消して、新しい内容に置き換えます。よろしいですか？`)) return;
+
+    const base = mode === 'replace' ? [] : events;
+    const keys = new Set(base.map(dupKey));
+    let added = 0, skipped = 0;
+    res.events.forEach((ev) => {
+      applyTimeRules(ev);
+      const k = dupKey(ev);
+      if (keys.has(k)) { skipped++; return; }
+      keys.add(k); base.push(ev); added++;
+    });
+    events = base;
+    sortEvents(); persist(); renderList();
+
+    const warnCount = events.filter((ev) => getIssues(ev).length).length;
+    let html = added ? `✓ ${added}件の予定を読み込みました。` : '新しく追加する予定はありませんでした。';
+    if (skipped) html += `（すでに一覧にある${skipped}件は追加しませんでした）`;
+    if (res.events.some((ev) => ev.yearInferred)) html += '<br>年が書いていない日付は、今日以降で一番近い日付の年にしました。';
+    if (warnCount) html += `<br>⚠ 黄色の予定（${warnCount}件）は確認が必要です。`;
+    showMsg(box, 'ok', html);
+    $('#listSection').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  });
+
+  $('#clearJson').addEventListener('click', () => { $('#jsonInput').value = ''; hideMsg($('#importMsg')); });
+
+  // ---------- ③ 設定 ----------
+  const prefixEl = $('#prefix');
+  prefixEl.value = prefix;
+  prefixEl.addEventListener('input', () => {
+    prefix = prefixEl.value;
+    store.set('prefix', prefix);
+    document.querySelectorAll('.pfx').forEach((el) => { el.textContent = prefix; });
+  });
+
+  const normCode = (s) => nfkc(s || '').replace(/\s+/g, '');
+  function lookupEnd(code) {
+    const n = normCode(code);
+    if (!n) return '';
+    const rows = timeTable.filter((r) => normCode(r.code) && r.end)
+      .sort((a, b) => normCode(b.code).length - normCode(a.code).length);
+    const hit = rows.find((r) => n === normCode(r.code)) || rows.find((r) => n.includes(normCode(r.code)));
+    return hit ? hit.end : '';
+  }
+
+  function applyTimeRules(ev) {
+    if (ev.allDay) return;
+    if (ev.autoEnd && ev.timeCode) ev.end = lookupEnd(ev.timeCode);
+    if (ev.autoStart) {
+      if (rule.mode === 'fixed') ev.start = rule.fixed || '';
+      else ev.start = ev.end ? fromMin(toMin(ev.end) - (Number(rule.minutes) || 0)) : '';
+    }
+  }
+
+  let reapplyTimer;
+  function reapplyAuto() {
+    clearTimeout(reapplyTimer);
+    reapplyTimer = setTimeout(() => {
+      events.forEach(applyTimeRules);
+      persist(); renderList();
+    }, 250);
+  }
+
+  function renderTable() {
+    $('#tableRows').innerHTML = timeTable.map((r, i) => `
+      <div class="trow" data-i="${i}">
+        <input type="text" data-k="code" value="${esc(r.code)}" placeholder="例：6限45分" aria-label="表記">
+        <span>→ 終了</span>
+        <input type="time" data-k="end" value="${esc(r.end)}" aria-label="終了時刻">
+        <button class="btn small danger" type="button" data-act="del-row" aria-label="この行を削除">削除</button>
+      </div>`).join('') || '<p class="note">対応表が空です。</p>';
+  }
+  const saveTable = () => store.set('timeTable', timeTable);
+  $('#tableRows').addEventListener('input', (e) => {
+    const k = e.target.dataset.k; if (!k) return;
+    timeTable[+e.target.closest('.trow').dataset.i][k] = e.target.value;
+    saveTable(); reapplyAuto();
+  });
+  $('#tableRows').addEventListener('click', (e) => {
+    if (!e.target.closest('[data-act=del-row]')) return;
+    timeTable.splice(+e.target.closest('.trow').dataset.i, 1);
+    saveTable(); renderTable(); reapplyAuto();
+  });
+  $('#addRow').addEventListener('click', () => {
+    timeTable.push({ code: '', end: '' });
+    saveTable(); renderTable();
+    const inputs = document.querySelectorAll('#tableRows input[data-k=code]');
+    inputs[inputs.length - 1].focus();
+  });
+  $('#resetTable').addEventListener('click', () => {
+    if (!confirm('対応表を初期値に戻します。よろしいですか？')) return;
+    timeTable = clone(DEFAULT_TABLE);
+    saveTable(); renderTable(); reapplyAuto();
+  });
+
+  const minutesEl = $('#minutes'), fixedEl = $('#fixedStart');
+  minutesEl.value = rule.minutes;
+  fixedEl.value = rule.fixed;
+  document.querySelector(`input[name=startMode][value=${rule.mode === 'fixed' ? 'fixed' : 'before'}]`).checked = true;
+  function onRuleChange() {
+    rule = {
+      mode: document.querySelector('input[name=startMode]:checked').value,
+      minutes: minutesEl.value === '' ? 0 : Number(minutesEl.value),
+      fixed: fixedEl.value,
+    };
+    store.set('startRule', rule);
+    reapplyAuto();
+  }
+  document.querySelectorAll('input[name=startMode]').forEach((r) => r.addEventListener('change', onRuleChange));
+  minutesEl.addEventListener('input', () => { document.querySelector('input[name=startMode][value=before]').checked = true; onRuleChange(); });
+  fixedEl.addEventListener('input', () => { document.querySelector('input[name=startMode][value=fixed]').checked = true; onRuleChange(); });
+
+  $('#applyStart').addEventListener('click', () => {
+    const targets = events.filter((ev) => ev.noPrintStart && !ev.allDay);
+    const box = $('#applyMsg');
+    if (!targets.length) { showMsg(box, 'error', '対象の予定（プリントに開始時刻が書いていない予定）がありません。'); return; }
+    targets.forEach((ev) => {
+      ev.autoStart = true;
+      if (ev.timeCode) ev.autoEnd = true;
+      applyTimeRules(ev);
+    });
+    persist(); renderList();
+    showMsg(box, 'ok', `✓ ${targets.length}件の予定に開始時刻を設定しました。`);
+  });
+
+  // ---------- ④ 一覧 ----------
+  function getIssues(ev) {
+    const r = [];
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(ev.date)) r.push('日付が入っていません');
+    if (!ev.title.trim()) r.push('タイトルが空です');
+    if (!ev.allDay) {
+      if (ev.autoEnd && ev.timeCode && !ev.end) r.push(`「${ev.timeCode}」が③の対応表にありません。対応表に追加するか、終了時刻を入れてください`);
+      else if (!ev.start && !ev.end) r.push('時刻が入っていません。時刻を入れるか「終日」にしてください');
+      else if (!ev.start) r.push('開始時刻が入っていません');
+      else if (!ev.end) r.push('終了時刻が入っていません');
+      else if (ev.end <= ev.start) r.push('終了時刻が開始時刻と同じか、それより前になっています');
+    }
+    return r;
+  }
+
+  function whenText(ev) {
+    const t = ev.allDay ? '終日' : `${ev.start || '--:--'}〜${ev.end || '--:--'}`;
+    return `${fmtDate(ev.date)} ${t}`;
+  }
+
+  function cardHTML(ev) {
+    return `
+    <div class="card" data-id="${ev.id}">
+      <div class="card-head">
+        <label class="chk"><input type="checkbox" data-field="checked" ${ev.checked ? 'checked' : ''}><span class="when"></span></label>
+        <button class="btn small danger" type="button" data-act="delete">削除</button>
+      </div>
+      <ul class="warn"></ul>
+      <div class="info"></div>
+      <div class="fields">
+        <label class="f">日付<input type="date" data-field="date" value="${esc(ev.date)}"></label>
+        <label class="f alldayl"><input type="checkbox" data-field="allDay" ${ev.allDay ? 'checked' : ''}>終日</label>
+        <label class="f time-field">開始<input type="time" data-field="start" value="${esc(ev.start)}"></label>
+        <label class="f time-field">終了<input type="time" data-field="end" value="${esc(ev.end)}"></label>
+        <label class="f full">タイトル
+          <span class="prefixed"><span class="pfx">${esc(prefix)}</span><input type="text" data-field="title" value="${esc(ev.title)}"></span>
+        </label>
+        <label class="f full">場所<input type="text" data-field="location" value="${esc(ev.location)}"></label>
+        <label class="f full">持ち物（「、」区切り）<input type="text" data-field="items" value="${esc(ev.items)}"></label>
+        <label class="f full">メモ<textarea data-field="note" rows="2">${esc(ev.note)}</textarea></label>
+      </div>
+    </div>`;
+  }
+
+  function updateCardMeta(ev) {
+    const card = $(`#list [data-id="${ev.id}"]`);
+    if (!card) return;
+    const issues = getIssues(ev);
+    card.querySelector('.when').textContent = whenText(ev);
+    card.classList.toggle('off', !ev.checked);
+    card.classList.toggle('allday', ev.allDay);
+    card.classList.toggle('has-warn', issues.length > 0);
+    const warn = card.querySelector('.warn');
+    warn.innerHTML = issues.map((x) => `<li>${esc(x)}</li>`).join('');
+    warn.hidden = !issues.length;
+    const tags = [];
+    if (ev.timeCode) tags.push(`プリントの表記：${ev.timeCode}`);
+    if (!ev.allDay && ev.autoStart && ev.start) tags.push(rule.mode === 'fixed' ? '開始：固定時刻' : `開始：終了の${rule.minutes}分前`);
+    if (ev.yearInferred) tags.push(`年はツールが推定（${ev.date.slice(0, 4)}年）`);
+    const info = card.querySelector('.info');
+    info.innerHTML = tags.map((t) => `<span class="tag">${esc(t)}</span>`).join('');
+    info.hidden = !tags.length;
+  }
+
+  function updateCounts() {
+    const checked = events.filter((e) => e.checked).length;
+    $('#count').textContent = events.length ? `${events.length}件中 ${checked}件を選択中（チェックした予定だけ登録されます）` : '';
+    const btn = $('#downloadBtn');
+    btn.textContent = `📅 ${checked}件を .ics でダウンロード`;
+    btn.disabled = checked === 0;
+    const n = events.filter((ev) => ev.noPrintStart && !ev.allDay).length;
+    $('#applyTarget').textContent = `対象：${n}件`;
+  }
+
+  function renderList() {
+    const list = $('#list');
+    list.innerHTML = events.length
+      ? events.map(cardHTML).join('')
+      : '<p class="empty">まだ予定がありません。②でJSONを読み込むか、「＋ 予定を追加」で追加してください。</p>';
+    events.forEach(updateCardMeta);
+    updateCounts();
+  }
+
+  function onCardInput(e) {
+    const t = e.target, f = t.dataset.field;
+    if (!f) return;
+    const ev = events.find((x) => x.id === t.closest('.card').dataset.id);
+    if (!ev) return;
+    ev[f] = t.type === 'checkbox' ? t.checked : t.value;
+    if (f === 'start') ev.autoStart = false;
+    if (f === 'end') ev.autoEnd = false;
+    if (f === 'date') ev.yearInferred = false;
+    persist(); updateCardMeta(ev); updateCounts();
+  }
+  $('#list').addEventListener('input', onCardInput);
+  $('#list').addEventListener('change', onCardInput);
+  $('#list').addEventListener('click', (e) => {
+    const b = e.target.closest('[data-act=delete]');
+    if (!b) return;
+    const card = b.closest('.card');
+    events = events.filter((x) => x.id !== card.dataset.id);
+    persist();
+    if (events.length) { card.remove(); updateCounts(); } else renderList();
+  });
+
+  $('#addEvent').addEventListener('click', () => {
+    const ev = {
+      id: newId(), checked: true, date: todayStr(), yearInferred: false, title: '', allDay: false,
+      start: '', end: '', timeCode: '', location: '', items: '', note: '',
+      noPrintStart: false, autoStart: false, autoEnd: false,
+    };
+    events.unshift(ev);
+    persist(); renderList();
+    const card = $(`#list [data-id="${ev.id}"]`);
+    card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    card.querySelector('[data-field=title]').focus({ preventScroll: true });
+  });
+  $('#selAll').addEventListener('click', () => { events.forEach((e) => { e.checked = true; }); persist(); renderList(); });
+  $('#selNone').addEventListener('click', () => { events.forEach((e) => { e.checked = false; }); persist(); renderList(); });
+  $('#clearAll').addEventListener('click', () => {
+    if (!events.length) return;
+    if (!confirm(`一覧の予定（${events.length}件）をすべて削除します。よろしいですか？`)) return;
+    events = []; persist(); renderList();
+  });
+
+  // ---------- ⑤ .ics 出力 ----------
+  function escText(s) {
+    return String(s).replace(/\\/g, '\\\\').replace(/;/g, '\\;').replace(/,/g, '\\,').replace(/\r?\n/g, '\\n');
+  }
+  // 1行75バイトごとに折り返す（iCalendarの決まり）
+  const encoder = new TextEncoder();
+  function fold(line) {
+    const parts = [];
+    let cur = '', bytes = 0, limit = 75;
+    for (const ch of line) {
+      const b = encoder.encode(ch).length;
+      if (bytes + b > limit) { parts.push(cur); cur = ''; bytes = 0; limit = 74; }
+      cur += ch; bytes += b;
+    }
+    parts.push(cur);
+    return parts.join('\r\n ');
+  }
+  // 同じ予定なら毎回同じ値になるハッシュ（UID用）
+  function hash(str) {
+    let h1 = 0xdeadbeef, h2 = 0x41c6ce57;
+    for (let i = 0; i < str.length; i++) {
+      const c = str.charCodeAt(i);
+      h1 = Math.imul(h1 ^ c, 2654435761);
+      h2 = Math.imul(h2 ^ c, 1597334677);
+    }
+    h1 = Math.imul(h1 ^ (h1 >>> 16), 2246822507) ^ Math.imul(h2 ^ (h2 >>> 13), 3266489909);
+    h2 = Math.imul(h2 ^ (h2 >>> 16), 2246822507) ^ Math.imul(h1 ^ (h1 >>> 13), 3266489909);
+    return (4294967296 * (2097151 & h2) + (h1 >>> 0)).toString(36);
+  }
+  // UID は「日付＋タイトル＋同じ日・同じタイトル内の順番」から作る。
+  // 時刻を含めないので、開始時刻のルールを変えて取り込み直しても重複しにくい。
+  function makeUid(ev, nth) {
+    const ymd = ev.date.replace(/-/g, '');
+    return `${ymd}-${hash(normTitle(ev.title))}-${nth}@${UID_DOMAIN}`;
+  }
+  function buildDescription(ev) {
+    const lines = [];
+    const items = ev.items.split(/[、,，\n]/).map((x) => x.trim()).filter(Boolean);
+    if (items.length) lines.push('【持ち物】' + items.join('、'));
+    if (ev.note.trim()) lines.push('【メモ】' + ev.note.trim());
+    if (ev.timeCode) lines.push('【プリントの表記】' + ev.timeCode);
+    return lines.join('\n');
+  }
+  function buildICS(list) {
+    const stamp = new Date().toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, '');
+    const L = [
+      'BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//print-to-ics//JA', 'CALSCALE:GREGORIAN', 'METHOD:PUBLISH',
+      'X-WR-TIMEZONE:Asia/Tokyo',
+      'BEGIN:VTIMEZONE', 'TZID:Asia/Tokyo',
+      'BEGIN:STANDARD', 'DTSTART:19700101T000000', 'TZOFFSETFROM:+0900', 'TZOFFSETTO:+0900', 'TZNAME:JST', 'END:STANDARD',
+      'END:VTIMEZONE',
+    ];
+    const counter = {};
+    const sorted = [...list].sort((a, b) =>
+      a.date.localeCompare(b.date) || (a.allDay ? '' : a.start).localeCompare(b.allDay ? '' : b.start));
+    sorted.forEach((ev) => {
+      const ymd = ev.date.replace(/-/g, '');
+      const key = ev.date + '|' + normTitle(ev.title);
+      counter[key] = (counter[key] || 0) + 1;
+      L.push('BEGIN:VEVENT', 'UID:' + makeUid(ev, counter[key]), 'DTSTAMP:' + stamp);
+      if (ev.allDay) {
+        L.push('DTSTART;VALUE=DATE:' + ymd, 'DTEND;VALUE=DATE:' + nextDay(ev.date));
+      } else {
+        L.push(`DTSTART;TZID=Asia/Tokyo:${ymd}T${ev.start.replace(':', '')}00`,
+               `DTEND;TZID=Asia/Tokyo:${ymd}T${ev.end.replace(':', '')}00`);
+      }
+      L.push('SUMMARY:' + escText(prefix + ev.title.trim()));
+      if (ev.location.trim()) L.push('LOCATION:' + escText(ev.location.trim()));
+      const desc = buildDescription(ev);
+      if (desc) L.push('DESCRIPTION:' + escText(desc));
+      L.push('END:VEVENT');
+    });
+    L.push('END:VCALENDAR');
+    return L.map(fold).join('\r\n') + '\r\n';
+  }
+
+  const fileNameEl = $('#fileName');
+  fileNameEl.value = store.get('fileName', 'schedule.ics');
+  fileNameEl.addEventListener('input', () => store.set('fileName', fileNameEl.value));
+
+  $('#downloadBtn').addEventListener('click', () => {
+    const box = $('#dlMsg');
+    const sel = events.filter((e) => e.checked);
+    if (!sel.length) { showMsg(box, 'error', '登録する予定にチェックを入れてください。'); return; }
+    const bad = sel.map((ev) => ({ ev, iss: getIssues(ev) })).filter((x) => x.iss.length);
+    if (bad.length) {
+      showMsg(box, 'error',
+        `<b>${bad.length}件の予定に問題があるため、ダウンロードできません。</b><ul>` +
+        bad.map((x) => `<li>${esc(fmtDate(x.ev.date))} ${esc(x.ev.title || '（タイトルなし）')}：${esc(x.iss.join('／'))}</li>`).join('') +
+        '</ul>内容を直すか、チェックを外してください。');
+      return;
+    }
+    let name = (fileNameEl.value.trim() || 'schedule').replace(/[\\/:*?"<>|]/g, '_');
+    if (!/\.ics$/i.test(name)) name += '.ics';
+    const blob = new Blob([buildICS(sel)], { type: 'text/calendar;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = name;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 10000);
+    showMsg(box, 'ok', `✓ ${sel.length}件の予定を「${esc(name)}」として保存しました。Googleカレンダーの「インポート」で取り込んでください。`);
+  });
+
+  // ---------- 起動 ----------
+  renderTable();
+  renderList();
+})();
+</script>
+</body>
+</html>
